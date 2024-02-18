@@ -1,0 +1,371 @@
+import React, { useRef, useEffect } from "react";
+import { Stage, Layer, Rect } from "react-konva";
+import Konva from "konva";
+import KonvaImage from "./KonvaImage"; // Assurez-vous que ce composant accepte et utilise `ref` correctement
+
+interface EditorProps {
+  imageUrl: string;
+}
+
+const GUIDELINE_OFFSET = 2;
+
+type Snap = "start" | "center" | "end";
+type SnappingEdges = {
+  vertical: Array<{
+    guide: number;
+    offset: number;
+    snap: Snap;
+  }>;
+  horizontal: Array<{
+    guide: number;
+    offset: number;
+    snap: Snap;
+  }>;
+};
+
+const Editor: React.FC<EditorProps> = ({ imageUrl }) => {
+  const stageRef = useRef<Konva.Stage>(null);
+  const layerRef = useRef<Konva.Layer>(null);
+  const printAreaRef = useRef<Konva.Rect>(null);
+  const imageRef = useRef<Konva.Image>(null);
+  const stageWidth = 500;
+  const stageHeight = 500;
+  const squareSize = 100;
+
+  const getLineGuideStops = () => {
+    if (!printAreaRef.current) return { vertical: [], horizontal: [] };
+    const pos = printAreaRef.current.getAbsolutePosition();
+    const vertical = [
+      pos.x,
+      pos.x + printAreaRef.current.width() / 2,
+      pos.x + printAreaRef.current.width(),
+    ];
+    const horizontal = [
+      pos.y,
+      pos.y + printAreaRef.current.height() / 2,
+      pos.y + printAreaRef.current.height(),
+    ];
+    return {
+      vertical,
+      horizontal,
+    };
+  };
+
+  const getObjectSnappingEdges = React.useCallback((): SnappingEdges => {
+    if (!imageRef.current) return { vertical: [], horizontal: [] };
+    const pos = imageRef.current.getAbsolutePosition();
+    console.log(Math.round(pos.x));
+
+    return {
+      vertical: [
+        {
+          guide: Math.round(pos.x),
+          offset: 0,
+          snap: "start",
+        },
+        {
+          guide: Math.round(pos.x + imageRef.current.width() / 2),
+          offset: -Math.round(imageRef.current.width() / 2),
+          snap: "center",
+        },
+        {
+          guide: Math.round(pos.x + imageRef.current.width()),
+          offset: -Math.round(imageRef.current.width()),
+          snap: "end",
+        },
+      ],
+      horizontal: [
+        {
+          guide: Math.round(pos.y),
+          offset: 0,
+          snap: "start",
+        },
+        {
+          guide: Math.round(pos.y + imageRef.current.height() / 2),
+          offset: -Math.round(imageRef.current.height() / 2),
+          snap: "center",
+        },
+        {
+          guide: Math.round(pos.y + imageRef.current.height()),
+          offset: -Math.round(imageRef.current.height()),
+          snap: "end",
+        },
+      ],
+    };
+  }, []);
+
+  /*   const getObjectSnappingEdges = React.useCallback(
+    (node: Konva.Shape): SnappingEdges => {
+      const box = node.getClientRect();
+      const absPos = node.absolutePosition();
+
+      return {
+        vertical: [
+          {
+            guide: Math.round(box.x),
+            offset: Math.round(absPos.x - box.x),
+            snap: "start",
+          },
+          {
+            guide: Math.round(box.x + box.width / 2),
+            offset: Math.round(absPos.x - box.x - box.width / 2),
+            snap: "center",
+          },
+          {
+            guide: Math.round(box.x + box.width),
+            offset: Math.round(absPos.x - box.x - box.width),
+            snap: "end",
+          },
+        ],
+        horizontal: [
+          {
+            guide: Math.round(box.y),
+            offset: Math.round(absPos.y - box.y),
+            snap: "start",
+          },
+          {
+            guide: Math.round(box.y + box.height / 2),
+            offset: Math.round(absPos.y - box.y - box.height / 2),
+            snap: "center",
+          },
+          {
+            guide: Math.round(box.y + box.height),
+            offset: Math.round(absPos.y - box.y - box.height),
+            snap: "end",
+          },
+        ],
+      };
+    },
+    []
+  ); */
+
+  const getGuides = React.useCallback(
+    (
+      lineGuideStops: ReturnType<typeof getLineGuideStops>,
+      itemBounds: ReturnType<typeof getObjectSnappingEdges>
+    ) => {
+      const resultV: Array<{
+        lineGuide: number;
+        diff: number;
+        snap: Snap;
+        offset: number;
+      }> = [];
+
+      /* const resultH: Array<{
+        lineGuide: number;
+        diff: number;
+        snap: Snap;
+        offset: number;
+      }> = []; */
+      console.log(lineGuideStops.vertical, itemBounds.vertical);
+
+      lineGuideStops.vertical.forEach((lineGuide) => {
+        itemBounds.vertical.forEach((itemBound) => {
+          const diff = Math.abs(lineGuide - itemBound.guide);
+          if (diff < GUIDELINE_OFFSET) {
+            resultV.push({
+              lineGuide: lineGuide,
+              diff: diff,
+              snap: itemBound.snap,
+              offset: itemBound.offset,
+            });
+          }
+        });
+      });
+
+      /* lineGuideStops.horizontal.forEach((lineGuide) => {
+        itemBounds.horizontal.forEach((itemBound) => {
+          const diff = Math.abs(lineGuide - itemBound.guide);
+          if (diff < GUIDELINE_OFFSET) {
+            resultH.push({
+              lineGuide: lineGuide,
+              diff: diff,
+              snap: itemBound.snap,
+              offset: itemBound.offset,
+            });
+          }
+        });
+      }); */
+
+      const guides: Array<{
+        lineGuide: number;
+        offset: number;
+        orientation: "V" | "H";
+        snap: "start" | "center" | "end";
+      }> = [];
+
+      const minV = resultV.sort((a, b) => a.diff - b.diff)[0];
+      /*       const minH = resultH.sort((a, b) => a.diff - b.diff)[0];
+       */
+      if (minV) {
+        guides.push({
+          lineGuide: minV.lineGuide,
+          offset: minV.offset,
+          orientation: "V",
+          snap: minV.snap,
+        });
+      }
+
+      /*       if (minH) {
+        guides.push({
+          lineGuide: minH.lineGuide,
+          offset: minH.offset,
+          orientation: "H",
+          snap: minH.snap,
+        });
+      } */
+
+      return guides;
+    },
+    []
+  );
+
+  const drawGuides = React.useCallback(
+    (guides: ReturnType<typeof getGuides>) => {
+      guides.forEach((lg) => {
+        if (!layerRef.current) {
+          return;
+        }
+        if (lg.orientation === "H") {
+          const line = new Konva.Line({
+            points: [-6000, 0, 6000, 0],
+            stroke: "rgb(0, 161, 255)",
+            strokeWidth: 1,
+            name: "guid-line",
+            dash: [4, 6],
+          });
+          layerRef.current.add(line);
+          line.absolutePosition({
+            x: 0,
+            y: lg.lineGuide,
+          });
+        } else if (lg.orientation === "V") {
+          const line = new Konva.Line({
+            points: [0, -6000, 0, 6000],
+            stroke: "rgb(0, 161, 255)",
+            strokeWidth: 1,
+            name: "guid-line",
+            dash: [4, 6],
+          });
+          layerRef.current.add(line);
+          line.absolutePosition({
+            x: lg.lineGuide,
+            y: 0,
+          });
+        }
+      });
+    },
+    []
+  );
+
+  const onDragMove = React.useCallback(
+    (e: Konva.KonvaEventObject<DragEvent>) => {
+      if (!layerRef.current) return;
+      if (!imageRef.current) return;
+      // clear all previous lines on the screen
+      layerRef.current.find(".guid-line").forEach((l: any) => l.destroy());
+
+      // find possible snapping lines
+      const lineGuideStops = getLineGuideStops();
+      // find snapping points of current object
+      const itemBounds = getObjectSnappingEdges();
+
+      // now find where can we snap current object
+      const guides = getGuides(lineGuideStops, itemBounds);
+
+      // do nothing if no snapping
+      if (!guides.length) {
+        return;
+      }
+
+      drawGuides(guides);
+
+      const absPos = imageRef.current.absolutePosition();
+      // now force object position
+      guides.forEach((lg) => {
+        switch (lg.snap) {
+          case "start": {
+            switch (lg.orientation) {
+              case "V": {
+                absPos.x = lg.lineGuide + lg.offset;
+                break;
+              }
+              case "H": {
+                absPos.y = lg.lineGuide + lg.offset;
+                break;
+              }
+            }
+            break;
+          }
+          case "center": {
+            switch (lg.orientation) {
+              case "V": {
+                absPos.x = lg.lineGuide + lg.offset;
+                break;
+              }
+              case "H": {
+                absPos.y = lg.lineGuide + lg.offset;
+                break;
+              }
+            }
+            break;
+          }
+          case "end": {
+            switch (lg.orientation) {
+              case "V": {
+                absPos.x = lg.lineGuide + lg.offset;
+                break;
+              }
+              case "H": {
+                absPos.y = lg.lineGuide + lg.offset;
+                break;
+              }
+            }
+            break;
+          }
+        }
+      });
+    },
+    [drawGuides, getGuides, getObjectSnappingEdges]
+  );
+
+  const onDragEnd = () => {
+    if (!layerRef.current) {
+      return;
+    }
+    // clear all previous lines on the screen
+    layerRef.current.find(".guid-line").forEach((l: any) => l.destroy());
+  };
+
+  useEffect(() => {
+    if (layerRef.current) {
+      layerRef.current.find(".guide").forEach((guide) => guide.destroy());
+    }
+  });
+
+  return (
+    <Stage width={stageWidth} height={stageHeight} ref={stageRef}>
+      <Layer ref={layerRef}>
+        <Rect
+          ref={printAreaRef}
+          x={stageWidth / 2 - squareSize / 2}
+          y={stageHeight / 2 - squareSize / 2}
+          width={squareSize}
+          height={squareSize}
+          fill="lightblue"
+          name="snapBox"
+        />
+        <KonvaImage
+          imageRef={imageRef}
+          src={imageUrl}
+          x={stageWidth / 2 - 50}
+          y={stageHeight / 2 - 50}
+          onDragMove={onDragMove}
+          onDragEnd={onDragEnd}
+        />
+      </Layer>
+    </Stage>
+  );
+};
+
+export default Editor;

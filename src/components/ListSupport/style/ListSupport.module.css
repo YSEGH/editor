@@ -1,0 +1,25 @@
+.list-support {
+  position: relative;
+  width: 100vw;
+  height: fit-content;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  overflow: auto;
+}
+.list-support::-webkit-scrollbar {
+}
+.support {
+  height: 75px;
+  width: 200px;
+  min-height: 75px;
+  min-width: 100px;
+}
+@media screen and (max-width: 780px) {
+  .support {
+    height: 50px;
+    width: 100px;
+    min-height: 50px;
+    min-width: 100px;
+  }
+}
