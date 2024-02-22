@@ -1,0 +1,4 @@
+.editor {
+  display: grid;
+  grid-template-rows: var(--menu-height) 1fr 100px;
+}
